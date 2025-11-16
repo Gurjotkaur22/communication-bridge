@@ -1,10 +1,10 @@
-# Communication Bridge 🎙️
+# Communication Bridge 
 
 A simple, mobile-friendly **text-to-speech web app** designed to help people with speech impairments or communication difficulties express themselves quickly and clearly.
 
 ---
 
-## 🚀 Features
+##  Features
 - Type any text and convert it to clear speech  
 - Pre-set quick phrases for common situations  
 - Adjustable volume control  
@@ -16,7 +16,7 @@ A simple, mobile-friendly **text-to-speech web app** designed to help people wit
 
 ---
 
-## 🧠 Tech Stack
+##  Tech Stack
 - **Next.js 16** (React + TypeScript)
 - **Web Speech API**
 - **Tailwind CSS**
