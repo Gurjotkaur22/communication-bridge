@@ -1,13 +1,14 @@
-'use client'; // allows browser features like speech synthesis
+'use client'; // enable browser APIs like speechSynthesis
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export default function Home() {
-  // state variables to store input text and volume
+  // UI state
   const [text, setText] = useState('');
-  const [volume, setVolume] = useState(1);
+  const [volume, setVolume] = useState(1); // 0..1
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // list of quick phrases
+  // Quick phrases for MVP
   const quickPhrases = [
     'I need help.',
     'Thank you.',
@@ -16,108 +17,217 @@ export default function Home() {
     "I'm calling about..."
   ];
 
-  // helper: speak out loud using browser's Web Speech API
+  // Capability detection
+  const supportsSpeech = () =>
+    typeof window !== 'undefined' && 'speechSynthesis' in window;
+
+  // Speak helper
   const speak = (message: string) => {
-    if (!window.speechSynthesis) {
-      alert('Speech synthesis not supported on this browser.');
+    if (!supportsSpeech()) {
+      alert('Text-to-speech is not supported on this browser.');
       return;
     }
-    const utterance = new SpeechSynthesisUtterance(message);
-    utterance.volume = volume;
-    window.speechSynthesis.cancel(); // stop any ongoing speech
-    window.speechSynthesis.speak(utterance);
+    const utter = new SpeechSynthesisUtterance(message);
+    utter.volume = Math.min(1, Math.max(0, volume));
+    utter.rate = 1;
+    utter.pitch = 1;
+
+    // Prefer an English voice if available
+    const voices = window.speechSynthesis.getVoices();
+    const en = voices.find(v => /en[-_]/i.test(v.lang));
+    if (en) utter.voice = en;
+
+    window.speechSynthesis.cancel(); // stop anything currently speaking
+    window.speechSynthesis.speak(utter);
+
+    // tiny haptic on supported mobile devices
+    try { (navigator as any).vibrate?.(30); } catch {}
   };
 
+  // Stop helper
+  const stopSpeaking = () => {
+    if (!supportsSpeech()) return;
+    window.speechSynthesis.cancel();
+  };
+
+  // iOS quirk: populate voices after a user gesture; we “warm” it here
+  useEffect(() => {
+    if (!supportsSpeech()) return;
+    const load = () => window.speechSynthesis.getVoices();
+    load();
+    window.speechSynthesis.addEventListener('voiceschanged', load);
+    return () => window.speechSynthesis.removeEventListener('voiceschanged', load);
+  }, []);
+
+  // Keyboard shortcuts on textarea: Cmd/Ctrl/Shift+Enter to speak, Esc to stop
+  const onKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
+    if ((e.key === 'Enter') && (e.metaKey || e.ctrlKey || e.shiftKey)) {
+      e.preventDefault();
+      const msg = text.trim();
+      if (msg) speak(msg);
+    } else if (e.key === 'Escape') {
+      stopSpeaking();
+    }
+  };
+
+  const disabled = !supportsSpeech();
+
+  // Simple inline styles (you can Tailwindify later)
+  const btn = {
+    padding: '10px 16px',
+    fontSize: 16,
+    borderRadius: 12,
+    border: '1px solid #d1d5db',
+    background: '#f8fafc',
+    cursor: 'pointer' as const,
+  };
+  const primaryBtn = { ...btn, background: '#2563eb', color: 'white', border: 'none' };
+  const dangerBtn = { ...btn, background: '#ef4444', color: 'white', border: 'none' };
+
   return (
-    <main style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: '100vh',
-      backgroundColor: '#fafafa',
-      padding: 20
-    }}>
-      <h1 style={{ fontSize: 28, fontWeight: 600, marginBottom: 20 }}>
-        Communication Bridge
-      </h1>
-
-      <textarea
-        placeholder="Type what you want to say..."
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        style={{
-          width: '80%',
-          height: 100,
-          fontSize: 18,
-          padding: 10,
-          borderRadius: 10,
-          border: '1px solid #ccc'
-        }}
-      />
-
-      <div style={{ marginTop: 10, display: 'flex', gap: 10 }}>
-        <button
-          onClick={() => speak(text)}
-          style={{
-            padding: '10px 20px',
-            fontSize: 16,
-            borderRadius: 8,
-            background: '#2563eb',
-            color: 'white',
-            border: 'none'
-          }}
-        >
-          Speak
-        </button>
-        <button
-          onClick={() => setText('')}
-          style={{
-            padding: '10px 20px',
-            fontSize: 16,
-            borderRadius: 8,
-            background: '#e5e7eb',
-            border: 'none'
-          }}
-        >
-          Clear
-        </button>
+    <main
+      style={{
+        minHeight: '100vh',
+        background: '#fafafa',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 20,
+      }}
+    >
+      {/* Status for screen readers */}
+      <div aria-live="polite" style={{ position: 'absolute', height: 0, overflow: 'hidden' }}>
+        {disabled ? 'Text to speech not supported' : 'Ready'}
       </div>
 
-      <div style={{
-        marginTop: 20,
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-        gap: 10,
-        width: '80%'
-      }}>
-        {quickPhrases.map((phrase, i) => (
+      <div
+        style={{
+          width: '100%',
+          maxWidth: 720,
+          background: 'white',
+          border: '1px solid #e5e7eb',
+          borderRadius: 16,
+          padding: 20,
+          boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
+        }}
+      >
+        <h1 style={{ fontSize: 26, fontWeight: 700, marginBottom: 16 }}>
+          Communication Bridge
+        </h1>
+
+        <label htmlFor="say" style={{ display: 'block', marginBottom: 6, fontWeight: 600 }}>
+          Type what you want to say
+        </label>
+        <textarea
+          id="say"
+          ref={textareaRef}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder="Type here…"
+          aria-label="Message text"
+          style={{
+            width: '100%',
+            minHeight: 120,
+            fontSize: 18,
+            padding: 12,
+            borderRadius: 12,
+            border: '1px solid #d1d5db',
+          }}
+        />
+
+        {/* Main controls */}
+        <div style={{ display: 'flex', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
           <button
-            key={i}
-            onClick={() => speak(phrase)}
+            style={primaryBtn}
+            onClick={() => text.trim() && speak(text)}
+            disabled={disabled}
+            aria-disabled={disabled}
+          >
+            Speak
+          </button>
+          <button
+            style={btn}
+            onClick={() => { setText(''); textareaRef.current?.focus(); }}
+          >
+            Clear
+          </button>
+          <button style={dangerBtn} onClick={stopSpeaking}>
+            Stop
+          </button>
+        </div>
+
+        {/* Volume */}
+        <div
+          style={{
+            marginTop: 16,
+            border: '1px solid #e5e7eb',
+            borderRadius: 12,
+            padding: 12,
+          }}
+        >
+          <label htmlFor="vol" style={{ display: 'block', fontWeight: 600, marginBottom: 8 }}>
+            Volume
+          </label>
+          <input
+            id="vol"
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={volume}
+            onChange={(e) => setVolume(parseFloat(e.target.value))}
+            aria-valuemin={0}
+            aria-valuemax={1}
+            aria-valuenow={volume}
+            style={{ width: '100%' }}
+          />
+          <div style={{ fontSize: 14, color: '#6b7280', marginTop: 6 }}>
+            {Math.round(volume * 100)}%
+          </div>
+        </div>
+
+        {/* Quick phrases */}
+        <h2 style={{ fontSize: 18, fontWeight: 700, marginTop: 18, marginBottom: 8 }}>
+          Quick phrases
+        </h2>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+            gap: 10,
+          }}
+        >
+          {quickPhrases.map((p, i) => (
+            <button
+              key={i}
+              style={btn}
+              onClick={() => speak(p)}
+              aria-label={`Say: ${p}`}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+
+        {disabled && (
+          <div
             style={{
-              padding: '10px',
-              fontSize: 16,
-              borderRadius: 8,
-              background: '#f1f5f9',
-              border: '1px solid #d1d5db'
+              marginTop: 12,
+              border: '1px solid #f59e0b',
+              background: '#fffbeb',
+              color: '#92400e',
+              padding: 12,
+              borderRadius: 12,
             }}
           >
-            {phrase}
-          </button>
-        ))}
-      </div>
+            Your browser doesn't support text-to-speech. Try the latest Chrome, Edge, or Safari.
+          </div>
+        )}
 
-      <div style={{ marginTop: 30 }}>
-        <label>Volume: {Math.round(volume * 100)}%</label><br />
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.01}
-          value={volume}
-          onChange={(e) => setVolume(parseFloat(e.target.value))}
-        />
+        <footer style={{ marginTop: 16, fontSize: 12, color: '#6b7280' }}>
+          v0.1 • No data stored • English only (MVP)
+        </footer>
       </div>
     </main>
   );
