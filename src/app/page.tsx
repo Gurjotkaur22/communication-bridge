@@ -5,11 +5,13 @@ import VoiceSelector from './components/VoiceSelector';
 import QuickPhrases from './components/QuickPhrases';
 import PecsBoard, { PecsItem } from './components/PecsBoard';
 
+import { loadSettings, saveSettings } from './lib/db';
+
 export default function Home() {
   const [text, setText] = useState('');
   const [volume, setVolume] = useState(1);
   const [lang, setLang] = useState('en-US');
-  const [voiceName, setVoiceName] = useState('');
+  const [voiceId, setVoiceId] = useState<string>(''); // voiceURI
   const [pecsMode, setPecsMode] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -39,13 +41,40 @@ export default function Home() {
 
   const supportsSpeech = () => typeof window !== 'undefined' && 'speechSynthesis' in window;
 
+  // HYDRATE settings from IndexedDB at startup
+  useEffect(() => {
+    (async () => {
+      try {
+        const s = await loadSettings(); // Settings | undefined
+        if (s) {
+          setLang(s.lang ?? 'en-US');
+          setVoiceId(s.voiceId ?? '');
+          setVolume(typeof s.volume === 'number' ? s.volume : 1);
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  }, []);
+
+  // PERSIST settings whenever they change
+  useEffect(() => {
+    saveSettings({ lang, voiceId, volume }).catch(() => {});
+  }, [lang, voiceId, volume]);
+
   const speak = (message: string) => {
     if (!supportsSpeech()) return alert('Speech not supported in this browser.');
     const utter = new SpeechSynthesisUtterance(message);
     utter.volume = Math.min(1, Math.max(0, volume));
     utter.lang = lang;
-    const v = voices.find(v => v.name === voiceName) || voices.find(v => v.lang === lang);
-    if (v) utter.voice = v;
+
+    // pick by voiceURI first; fallback to first voice matching lang
+    const voice =
+      voices.find(v => v.voiceURI === voiceId) ||
+      voices.find(v => v.lang === lang);
+
+    if (voice) utter.voice = voice;
+
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utter);
     try { (navigator as any).vibrate?.(30); } catch {}
@@ -65,9 +94,9 @@ export default function Home() {
 
         <section style={{ marginTop:16 }}>
           <VoiceSelector
-            value={voiceName}
+            value={voiceId}     // voiceURI
             lang={lang}
-            onChange={setVoiceName}
+            onChange={setVoiceId}
             onLangChange={setLang}
           />
         </section>
@@ -102,7 +131,7 @@ export default function Home() {
         )}
 
         <footer style={{ marginTop:16, fontSize:12, color:'#6b7280' }}>
-          v0.2 • English by default • Voice & language selectable • PECS mode
+          v0.3 • Settings persist (lang/voice/volume) • PECS mode
         </footer>
       </div>
     </main>
