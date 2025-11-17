@@ -79,6 +79,7 @@ export default function Home() {
               label: c.label,
               phrase: c.phrase,
               image: c.imageDataURL || '/images/blank.png',
+              audioSrc: c.audioBlobURL || undefined,
             })),
           ]);
       } catch {
@@ -142,12 +143,13 @@ export default function Home() {
     }
   }
 
-  // edit mode actions — PECS
-  async function addPecsCard(input: { label: string; phrase?: string; imageDataURL?: string }) {
+  // edit mode actions — PECS (now supports audio)
+  async function addPecsCard(input: { label: string; phrase?: string; imageDataURL?: string; audioDataURL?: string }) {
     await upsertPecs({
       label: input.label.trim(),
       phrase: input.phrase?.trim() ?? '',
       imageDataURL: input.imageDataURL ?? '',
+      audioBlobURL: input.audioDataURL ?? '', // store recording
     });
     const dbP = await listPecs();
     setPecs([
@@ -156,6 +158,7 @@ export default function Home() {
         label: c.label,
         phrase: c.phrase,
         image: c.imageDataURL || '/images/blank.png',
+        audioSrc: c.audioBlobURL || undefined,
       })),
     ]);
   }
@@ -171,6 +174,7 @@ export default function Home() {
           label: c.label,
           phrase: c.phrase,
           image: c.imageDataURL || '/images/blank.png',
+          audioSrc: c.audioBlobURL || undefined,
         })),
       ]);
     }
@@ -241,10 +245,7 @@ export default function Home() {
               }}
             />
             <div style={{ display: 'flex', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
-              <button
-                onClick={() => text.trim() && speak(text)}
-                style={{ ...primaryBtn }}
-              >
+              <button onClick={() => text.trim() && speak(text)} style={primaryBtn}>
                 Speak
               </button>
               <button
@@ -317,7 +318,7 @@ export default function Home() {
         )}
 
         <footer style={{ marginTop: 16, fontSize: 12, color: '#6b7280' }}>
-          v0.4 • Edit Mode • Custom phrases & PECS (persisted)
+          v0.5 • PECS audio recording & playback • Edit Mode persisted
         </footer>
       </div>
     </main>
